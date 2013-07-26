@@ -1,34 +1,22 @@
 package com.github.trylks.scarab.paper
 
-import scala.reflect.io.File
-import scala.collection.mutable.ArrayBuffer
+import java.io.File
+import com.typesafe.config.ConfigFactory
+import scala.collection.JavaConverters._
+import java.util.Date
+import java.text.SimpleDateFormat
 
-class Message(var to:String, var from:String, var subject:String, var body:String, attachments:ArrayBuffer[File]) {
-  
-  def to_ (address:String):Message = {
-    this.to = address
-    return this
-  }
-  
-  def from_ (address:String): Message = {
-    this.from = address
-    this
-  }
-  
-  def subject_ (text:String): Message = {
-    this.subject = text
-    this
-  }
-  
-  def body_ (text:String): Message = {
-    this.body = text
-    this
-  }
-  
-  def attach(file:File): Message = {
-    this.attachments += file
-    this
-  }
-
-
+// I'm not certain about solutions more elegant than this object
+// or maybe this is the elegant solution and I should change everything else :-m
+object defs {
+  val conf = ConfigFactory.load()
+  def mailTime(time:Date=new Date()):String = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z").format(time)
 }
+
+case class Message(val from:String = defs.conf.getString("scarab.paper.from"),
+                   val to:Seq[String] = defs.conf.getStringList("scarab.paper.to").asScala,
+                   val cc:Seq[String] = defs.conf.getStringList("scarab.paper.cc").asScala,
+                   val subject:String = defs.conf.getString("scarab.paper.subject"),
+                   val body:String = defs.conf.getString("scarab.paper.body"),
+                   val attachments:Seq[File] = Seq(),
+                   val date:String = defs.mailTime())

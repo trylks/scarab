@@ -60,3 +60,4 @@ project/plugins/project/
 # from me (incredible that was not enough)
 
 .cache
+application.conf

@@ -3,6 +3,7 @@ package samples
 import org.junit.runner.RunWith
 import org.specs2.mutable._
 import org.specs2.runner._
+import com.typesafe.config.ConfigFactory
   
 
 /**
@@ -26,6 +27,16 @@ class MySpecTest extends Specification {
     }
     "end with 'world'" in {
       "Hello world" must endWith("world")
+    }
+  }
+}
+
+
+@RunWith(classOf[JUnitRunner])
+class MyMySpecTest extends Specification {
+  "Configuration" should {
+    "be accessible" in {
+      ConfigFactory.load().getString("simple-app.answer") must equalTo ("42")
     }
   }
 }
