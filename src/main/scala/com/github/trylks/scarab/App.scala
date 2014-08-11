@@ -8,17 +8,17 @@ import java.io.File
  * @author trylks
  */
 object App {
-  
-  def foo(x : Array[String]) = x.foldLeft("")((a,b) => a + b)
-  
-  def main(args : Array[String]) {
-    println( "Hello World!" )
-    val ts = new TitanScarab()
-    // ts.send(Message(attachments=Seq(new File("../../../ichigo.png"))))
-    // ts.send(Message(date = ts.mailAgoBy(days=3)))
-    for (m <- ts.receiveNew())
-      println(m.subject)
-    println("I'm done, bye!")
-  }
+
+    def foo(x: Array[String]) = x.foldLeft("")((a, b) => a + b)
+
+    def main(args: Array[String]) {
+        println("Hello World!")
+        val ts = new TitanScarab()
+        ts.send(Message(attachments = Seq(new File("../../../alphonse.png"))))
+        ts.send(Message(date = ts.mailAgoBy(days = 3)))
+        for (m <- ts.receiveNew())
+            println(m.subject)
+        println("I'm done, bye!")
+    }
 
 }
