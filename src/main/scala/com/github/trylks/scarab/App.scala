@@ -17,8 +17,8 @@ object App {
         //println(Message(attachments = Seq(new File("../../../cake.png"))))
         //ts.send(Message(attachments = Seq(new File("../../../cake.png"))))
         //ts.send(Message(date = ts.mailAgoBy(days = 3)))
-        /*for (m <- ts.receiveNew())
-            println(m.subject)*/
+        for (m <- ts.receiveNew())
+            println(m)
         println("I'm done, bye!")
     }
 

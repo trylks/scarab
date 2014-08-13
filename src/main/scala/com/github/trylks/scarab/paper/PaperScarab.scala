@@ -15,10 +15,6 @@ import com.sun.mail.util.BASE64DecoderStream
 import java.io.FileOutputStream
 import org.apache.commons.io.IOUtils
 
-// this was quite helpful: https://gist.github.com/mariussoutier/3436111
-// some day I may use that to improve this
-// also this: http://stackoverflow.com/questions/848794/sending-email-in-java-using-apache-commons-email-libs
-
 trait PaperScarab extends Scarab with SandScarab {
 
     val mailHandlers: Map[Regex, Message => Boolean] = Map(".*".r -> (x => false))
@@ -32,7 +28,6 @@ trait PaperScarab extends Scarab with SandScarab {
         mail setSSLOnConnect conf.getBoolean("scarab.paper.ssl")
         mail setFrom msg.from(0)
         mail setHeaders Map("Date" -> msg.date).asJava
-        // println(s"chosen date: ${msg.date}")
         mail setSubject msg.subject
         mail setMsg msg.body
         for (receiver <- msg.to)
@@ -53,26 +48,15 @@ trait PaperScarab extends Scarab with SandScarab {
         send(Message(subject = brief, body = full))
     }
 
-    // helpful pages:
-    // https://forums.oracle.com/thread/1590957
-    // http://stackoverflow.com/questions/12967591/javamail-unread-message-returns-very-last-messages-rather-than-unread
-    // http://docs.oracle.com/javaee/6/api/index.html?javax/mail/Flags.html
-    // http://alvinalexander.com/scala/scala-imaps-ssl-email-client-javamail-yahoo-gmail
     def receiveNew() = {
         val session = Session.getDefaultInstance(Map("" -> ""), null)
         val store = session.getStore("imaps")
-        //try {
-        // use imap.gmail.com for gmail
         store.connect(cs"scarab.paper.imaphost", cs"scarab.paper.user", cs"scarab.paper.password")
         val inbox = store.getFolder("Inbox")
         inbox.open(Folder.READ_WRITE)
         val messages = inbox.search(new FlagTerm(new Flags(Flags.Flag.SEEN), false)).map(javax2ME(_))
-        println(messages.map(_.toString).mkString("\n\n"))
         inbox.close(true)
         messages
-        /*} finally {
-            store.close()
-        }*/
     }
 
     def processNew() = {
@@ -104,16 +88,19 @@ trait PaperScarab extends Scarab with SandScarab {
                 saveIn(fs, file, s"t: $t \nc: ${fs.getClass().toString()}\nn: $name")
                 Seq(file)
             }
-        if (t.equalsIgnoreCase("text/plain"))
-            (fs.asInstanceOf[String], "", Seq())
-        else if (t.equalsIgnoreCase("text/html"))
-            ("", fs.asInstanceOf[String], Seq())
-        else if (t.substring(0, 9).equalsIgnoreCase("multipart")) {
+        if (t.toLowerCase().startsWith("text/plain"))
+            (fs.asInstanceOf[String], "", files)
+        else if (t.toLowerCase().startsWith("text/html"))
+            ("", fs.asInstanceOf[String], files)
+        else if (t.toLowerCase().startsWith("multipart")) {
             val parts = fs.asInstanceOf[javax.mail.internet.MimeMultipart]
-            (0 until parts.getCount()).map(x => parts.getBodyPart(x)).map(p => processContent(p.getContentType(), p.getContent(), p.getFileName())).fold[(String, String, Seq[File])]("", "", Seq())(aggregate)
-        } else {
+            (0 until parts.getCount()).map(parts.getBodyPart(_)).map(processPart).fold("", "", files)(aggregateContents)
+        } else
             ("", "", files)
-        }
+    }
+
+    def processPart(p: javax.mail.BodyPart) = {
+        processContent(p.getContentType(), p.getContent(), p.getFileName())
     }
 
     def saveIn(input: Object, output: File, types: String) = input match {
@@ -121,7 +108,7 @@ trait PaperScarab extends Scarab with SandScarab {
         case _                      => note("unknown mail attachment type", types)
     }
 
-    def aggregate(e1: (String, String, Seq[File]), e2: (String, String, Seq[File])): (String, String, Seq[File]) = {
+    def aggregateContents(e1: (String, String, Seq[File]), e2: (String, String, Seq[File])): (String, String, Seq[File]) = {
         (e1._1 + e2._1, e1._2 + e2._2, e1._3 ++ e2._3)
     }
 
