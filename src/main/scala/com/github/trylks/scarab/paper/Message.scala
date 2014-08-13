@@ -23,6 +23,6 @@ case class Message(val from: Seq[String] = defs.conf.getStringList("scarab.paper
                    val date: String = defs.mailTime(),
                    val imapPointer: javax.mail.Message = null) {
     private def p(elements: Seq[String]): String = elements.mkString(", ")
-    private def a(elements: Seq[File]): String = elements.map(_.getName()).mkString(", ")
+    private def a(elements: Seq[File]): String = elements.map(_.getAbsolutePath()).mkString(", ")
     override def toString(): String = s"Message:\n\tFrom:\t${p(from)}\n\tTo:\t${p(to)}\n\tCC:\t${p(cc)}\n\tSubject:$subject\n\tBody:\t$body\n\tBody2:\t$htmlbody\n\tAtt:\t${a(attachments)}"
 }

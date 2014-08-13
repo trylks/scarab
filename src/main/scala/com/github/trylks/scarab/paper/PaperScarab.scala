@@ -2,6 +2,7 @@ package com.github.trylks.scarab.paper
 
 import com.github.trylks.scarab.Scarab
 import com.github.trylks.scarab.implicits._
+import com.github.trylks.scarab.ScarabCommons._
 import org.apache.commons.mail._
 import scala.collection.JavaConverters._
 import javax.mail.Session
@@ -63,22 +64,22 @@ trait PaperScarab extends Scarab with SandScarab {
         receiveNew map processMail forall _
     }
 
-    def processWith(pattern: Regex, function: Message => Boolean, m: Message): Boolean = {
+    private def processWith(pattern: Regex, function: Message => Boolean, m: Message): Boolean = {
         pattern.findFirstIn(m.subject).nonEmpty && function(m)
     }
 
-    def processMail(m: Message): Boolean = {
+    private def processMail(m: Message): Boolean = {
         val processed = mailHandlers map (e => processWith(e._1, e._2, m)) exists (x => x)
         if (processed)
             m.imapPointer.setFlag(Flags.Flag.SEEN, true)
         processed
     }
 
-    def convertAddresses(addresses: Array[javax.mail.Address]): Seq[String] = {
+    private def convertAddresses(addresses: Array[javax.mail.Address]): Seq[String] = {
         addresses.toSeq.filter(_ != null).map(_.toString)
     }
 
-    def processContent(t: String, fs: Object, name: String): (String, String, Seq[File]) = {
+    private def processContent(t: String, fs: Object, name: String): (String, String, Seq[File]) = {
         val files =
             if (name == null)
                 Seq()
@@ -99,20 +100,20 @@ trait PaperScarab extends Scarab with SandScarab {
             ("", "", files)
     }
 
-    def processPart(p: javax.mail.BodyPart) = {
+    private def processPart(p: javax.mail.BodyPart) = {
         processContent(p.getContentType(), p.getContent(), p.getFileName())
     }
 
-    def saveIn(input: Object, output: File, types: String) = input match {
-        case i: BASE64DecoderStream => IOUtils.copy(i, new FileOutputStream(output))
+    private def saveIn(input: Object, output: File, types: String) = input match {
+        case i: BASE64DecoderStream => using(new FileOutputStream(output)) { IOUtils.copy(i, _) }
         case _                      => note("unknown mail attachment type", types)
     }
 
-    def aggregateContents(e1: (String, String, Seq[File]), e2: (String, String, Seq[File])): (String, String, Seq[File]) = {
+    private def aggregateContents(e1: (String, String, Seq[File]), e2: (String, String, Seq[File])): (String, String, Seq[File]) = {
         (e1._1 + e2._1, e1._2 + e2._2, e1._3 ++ e2._3)
     }
 
-    def javax2ME(m: javax.mail.Message): Message = {
+    private def javax2ME(m: javax.mail.Message): Message = {
         val (plainText, htmlText, files) = processContent(m.getContentType(), m.getContent(), m.getFileName())
         m.setFlag(Flags.Flag.SEEN, false)
         Message(subject = m.getSubject(),
