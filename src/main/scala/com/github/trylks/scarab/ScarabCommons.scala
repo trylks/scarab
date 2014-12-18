@@ -21,10 +21,10 @@ object ScarabCommons {
 
     def fromFuture[A, B](f: A => B): Future[A] => B = x => f(Await.result(x, Duration.Inf))
 
-    @tailrec
-    def fwhile[A](start: A, stopCondition: A => Boolean, body: A => A): A =
-        if (stopCondition(start))
-            start
+    def nonull[A](a: A): Option[A] =
+        if (a == null)
+            None
         else
-            fwhile(body(start), stopCondition, body)
+            Some(a)
+
 }
