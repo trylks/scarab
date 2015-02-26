@@ -18,7 +18,7 @@ object App {
         //PaperScarab.send(Message(date = ts.mailAgoBy(days = 3)))
         for (m <- PaperScarab.receiveNew())
             println(m)
-        println("I'm done, bye!")
+        println("Good bye World...")
     }
 
 }

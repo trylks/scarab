@@ -21,4 +21,10 @@ object ScarabCommons {
         else
             Some(a)
 
+    def stateChages[A](a: A)(ops: Seq[A => Any]): A =
+        ops.foldLeft(a)((a, o) => {
+            o(a)
+            a
+        })
+
 }
