@@ -15,8 +15,9 @@ import java.io.File
 import com.sun.mail.util.BASE64DecoderStream
 import java.io.FileOutputStream
 import org.apache.commons.io.IOUtils
+import com.github.trylks.scarab.paper.SandScarab._
 
-trait PaperScarab extends Scarab with SandScarab {
+object PaperScarab {
 
     val mailHandlers: Map[Regex, Message => Boolean] = Map(".*".r -> (x => false))
 

@@ -15,12 +15,6 @@ object ScarabCommons {
         }
     }
 
-    def futurize[A, B](f: A => B): Future[A] => Future[B] = toFuture(fromFuture(f))
-
-    def toFuture[A, B](f: A => B): A => Future[B] = x => future { f(x) }
-
-    def fromFuture[A, B](f: A => B): Future[A] => B = x => f(Await.result(x, Duration.Inf))
-
     def nonull[A](a: A): Option[A] =
         if (a == null)
             None

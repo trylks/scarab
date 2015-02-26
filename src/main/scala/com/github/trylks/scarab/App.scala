@@ -13,11 +13,10 @@ object App {
 
     def main(args: Array[String]) {
         println("Hello World!")
-        val ts = new TitanScarab()
         //println(Message(attachments = Seq(new File("../../../cake.png"))))
-        //ts.send(Message(attachments = Seq(new File("../../../cake.png"))))
-        //ts.send(Message(date = ts.mailAgoBy(days = 3)))
-        for (m <- ts.receiveNew())
+        //PaperScarab.send(Message(attachments = Seq(new File("../../../cake.png"))))
+        //PaperScarab.send(Message(date = ts.mailAgoBy(days = 3)))
+        for (m <- PaperScarab.receiveNew())
             println(m)
         println("I'm done, bye!")
     }

@@ -5,9 +5,8 @@ import java.util.Date
 import java.text.SimpleDateFormat
 import scala.concurrent.duration._
 import java.util.Locale
-import com.github.trylks.scarab.Scarab
 
-trait SandScarab extends Scarab {
+object SandScarab {
     // def now = Calendar.getInstance().getTime()
     def now = new Date()
     def mailTime(time: Date = new Date()): String = new SimpleDateFormat("EEE, d MMM yyyy HH:mm:ss Z", Locale.US).format(time)
