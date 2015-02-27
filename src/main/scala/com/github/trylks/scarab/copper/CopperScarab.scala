@@ -22,10 +22,15 @@ import org.apache.http.message.BasicNameValuePair
 import scala.Function.tupled
 import org.apache.http.client.entity.UrlEncodedFormEntity
 import org.jsoup.nodes.Element
+import org.apache.http.client.utils.URIBuilder
+import org.apache.http.client.utils.URIUtils
+import org.apache.http.StatusLine
+import scala.annotation.tailrec
 
 class CopperScarab extends Scarab with Closeable {
 
-    type Response = (Seq[Header], Document)
+    // TODO: I'd like to store here the traversed URLS, but I'll do that some other day
+    case class Response(status: StatusLine, head: Map[String, String], body: Document, path: Seq[String])
 
     val exceptDoc = new Document("http://exception.com/")
 
@@ -37,37 +42,59 @@ class CopperScarab extends Scarab with Closeable {
         .setDefaultHeaders(headers.map(tupled(new BasicHeader(_, _))).asJavaCollection)
         .build()
 
-    private def execute(request: HttpRequestBase): Response = {
+    private def singleExecute(request: HttpRequestBase, paths: Seq[String]): Response = {
         // 	request.addHeader("", "")
         using(client.execute(request)) { response =>
             using(response.getEntity().getContent()) { content =>
                 val document = Jsoup.parse(fromInputStream(content).mkString)
-                (response.getAllHeaders(), document)
+                Response(response.getStatusLine(), response.getAllHeaders().map(h => h.getName() -> h.getValue()).toMap, document, paths :+ request.getURI().toString())
             }
         }
     }
 
-    def get(url: String): Response = execute(new HttpGet(url))
+    private def isRedirect(r: Response): Boolean = r.head.contains("Location") || r.head.contains("location")
+    private def getRedirect(r: Response): String = r.head.getOrElse("Location", r.head.getOrElse("location", "/"))
+    def makeNewRequest(req: HttpRequestBase, path: String) = {
+        req.setURI(new URIBuilder(req.getURI).setPath(path).build)
+        req
+    }
+
+    @tailrec
+    private def followExecute(request: HttpRequestBase, path: Seq[String] = Seq()): Response = {
+        val res = singleExecute(request, path)
+        if (isRedirect(res))
+            // followExecute(makeNewRequest(request, getRedirect(res)), previousURLS :+ request.getURI.toString())
+            followExecute(new HttpGet(formTargetURL(request.getURI.toString, getRedirect(res))), path :+ request.getURI.toString)
+        else
+            res
+    }
+
+    def get(url: String): Response = followExecute(new HttpGet(url))
 
     def save(url: String, values: Map[String, String] = Map(), path: String) = "good" // TODO: pending  
 
     def post(url: String, values: Map[String, String]): Response = {
         // TODO: check what to do with fileEntities, start by checking how does http work...
+        // probably in not one single way, this is something to study further based on the intended use
         val encodedValues = new UrlEncodedFormEntity(values.map(tupled(new BasicNameValuePair(_, _))).asJava)
         val request = new HttpPost(url)
         request setEntity encodedValues
-        execute(request)
+        followExecute(request)
     }
 
     def form(url: String, values: Map[String, String]): Response = {
-        val (head, doc) = get(url)
-        val form = doc.getElementsByTag("form").asScala.filter {
+        val r = get(url)
+        val form = r.body.getElementsByTag("form").asScala.filter {
             e => !values.keys.exists(e.getElementsByAttributeValue("name", _).isEmpty())
         }(0)
         val fields = form.getElementsByAttribute("value").asScala
         val expandedValues = (fields.map(e => (e.attr("name") -> e.attr("value"))) ++ values).toMap
-        post(url, expandedValues)
+        println(expandedValues)
+        post(formTargetURL(url, form.attr("action")), expandedValues)
     }
+
+    private def formTargetURL(url: String, actionURL: String): String =
+        new URIBuilder(url).setPath(actionURL).build().toString()
 
     def close() = client.close
 
