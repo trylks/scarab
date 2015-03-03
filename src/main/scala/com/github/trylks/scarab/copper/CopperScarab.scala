@@ -6,7 +6,7 @@ import org.apache.http.client.methods.HttpGet
 import com.github.trylks.scarab.ScarabCommons._
 import org.apache.http.Header
 import java.io.Closeable
-import scala.io.Source.fromInputStream
+import scala.io.Source._
 import org.apache.http.HttpEntity
 import org.apache.http.HttpResponse
 import scala.collection.JavaConverters._
@@ -29,8 +29,7 @@ import scala.annotation.tailrec
 
 class CopperScarab extends Scarab with Closeable {
 
-    // TODO: I'd like to store here the traversed URLS, but I'll do that some other day
-    case class Response(status: StatusLine, head: Map[String, String], body: Document, path: Seq[String])
+    case class Response(status: StatusLine, head: Map[String, String], doc: Document, path: Seq[String])
 
     val exceptDoc = new Document("http://exception.com/")
 
@@ -43,31 +42,32 @@ class CopperScarab extends Scarab with Closeable {
         .build()
 
     private def singleExecute(request: HttpRequestBase, paths: Seq[String]): Response = {
-        // 	request.addHeader("", "")
+        // 	request.addHeader("", "") // todo: add referers...
         using(client.execute(request)) { response =>
             using(response.getEntity().getContent()) { content =>
-                val document = Jsoup.parse(fromInputStream(content).mkString)
-                Response(response.getStatusLine(), response.getAllHeaders().map(h => h.getName() -> h.getValue()).toMap, document, paths :+ request.getURI().toString())
+                Response(
+                    response.getStatusLine(),
+                    response.getAllHeaders().map(h => h.getName() -> h.getValue()).toMap,
+                    Jsoup.parse(fromInputStream(content).mkString),
+                    paths :+ request.getURI().toString()
+                )
             }
         }
     }
 
-    private def isRedirect(r: Response): Boolean = r.head.contains("Location") || r.head.contains("location")
-    private def getRedirect(r: Response): String = r.head.getOrElse("Location", r.head.getOrElse("location", "/"))
-    def makeNewRequest(req: HttpRequestBase, path: String) = {
-        req.setURI(new URIBuilder(req.getURI).setPath(path).build)
-        req
-    }
+    private def isRedirect(r: Response): Boolean = r.head.contains("Location")
+    private def getRedirect(r: Response): String = r.head.getOrElse("Location", "/")
 
     @tailrec
     private def followExecute(request: HttpRequestBase, path: Seq[String] = Seq()): Response = {
         val res = singleExecute(request, path)
         if (isRedirect(res))
-            // followExecute(makeNewRequest(request, getRedirect(res)), previousURLS :+ request.getURI.toString())
             followExecute(new HttpGet(formTargetURL(request.getURI.toString, getRedirect(res))), path :+ request.getURI.toString)
         else
             res
     }
+
+    def download(url: String): Unit = {} // TODO
 
     def get(url: String): Response = followExecute(new HttpGet(url))
 
@@ -84,12 +84,11 @@ class CopperScarab extends Scarab with Closeable {
 
     def form(url: String, values: Map[String, String]): Response = {
         val r = get(url)
-        val form = r.body.getElementsByTag("form").asScala.filter {
+        val form = r.doc.getElementsByTag("form").asScala.filter {
             e => !values.keys.exists(e.getElementsByAttributeValue("name", _).isEmpty())
         }(0)
         val fields = form.getElementsByAttribute("value").asScala
         val expandedValues = (fields.map(e => (e.attr("name") -> e.attr("value"))) ++ values).toMap
-        println(expandedValues)
         post(formTargetURL(url, form.attr("action")), expandedValues)
     }
 
