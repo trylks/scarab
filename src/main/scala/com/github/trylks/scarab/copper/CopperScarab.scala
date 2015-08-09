@@ -28,19 +28,14 @@ import org.jsoup.nodes.Document
 import com.github.trylks.scarab.Scarab
 import com.github.trylks.scarab.ScarabCommons.using
 import com.github.trylks.scarab.implicits.StringPrefexes
+import scala.language.implicitConversions
 
 class CopperScarab extends Scarab with Closeable {
 
-  implicit def toResponse(raw: RawResponse): DocResponse = DocResponse(raw.status, raw.head, Jsoup.parse(fromInputStream(raw.content).mkString), raw.path)
   implicit def toEncodedEntity(values: Map[String, String]): UrlEncodedFormEntity = new UrlEncodedFormEntity(values.map(tupled(new BasicNameValuePair(_, _))).asJava)
-  trait Response {
-    def status: StatusLine
-    def head: Map[String, String]
-    def path: Seq[String]
-  }
-  case class DocResponse(override val status: StatusLine, override val head: Map[String, String], doc: Document, override val path: Seq[String]) extends Response
-  case class RawResponse(override val status: StatusLine, override val head: Map[String, String], content: InputStream, override val path: Seq[String] = Seq()) extends Response {
+  case class Response(status: StatusLine, head: Map[String, String], content: InputStream, path: Seq[String] = Seq()) {
     def setPaths(paths: Seq[String]) = this.copy(path = paths)
+    def doc = Jsoup.parse(fromInputStream(content).mkString)
   }
 
   val exceptDoc = new Document("http://exception.com/")
@@ -53,10 +48,10 @@ class CopperScarab extends Scarab with Closeable {
     .setDefaultHeaders(headers.map(tupled(new BasicHeader(_, _))).asJavaCollection)
     .build()
 
-  private def singleExecute(request: HttpRequestBase): RawResponse = {
+  private def singleExecute(request: HttpRequestBase): Response = {
     request.addHeader("Referer", request.getURI.getHost.toString)
     using(client.execute(request)) { response =>
-      RawResponse(
+      Response(
         response.getStatusLine,
         response.getAllHeaders.map(h => h.getName -> h.getValue).toMap,
         response.getEntity.getContent)
@@ -67,7 +62,7 @@ class CopperScarab extends Scarab with Closeable {
   private def getRedirect(r: Response): String = r.head.getOrElse("Location", "/")
 
   @tailrec
-  private def followExecute(request: HttpRequestBase, paths: Seq[String] = Seq()): RawResponse = {
+  private def followExecute(request: HttpRequestBase, paths: Seq[String] = Seq()): Response = {
     val res = singleExecute(request)
     if (isRedirect(res))
       followExecute(new HttpGet(formTargetURL(request.getURI.toString, getRedirect(res))), paths :+ request.getURI.toString)
@@ -75,7 +70,7 @@ class CopperScarab extends Scarab with Closeable {
       res setPaths paths :+ request.getURI.toString
   }
 
-  def get(url: String): DocResponse = followExecute(new HttpGet(url))
+  def get(url: String): Response = followExecute(new HttpGet(url))
 
   def download(url: String, path: String, values: Map[String, String] = Map()) = {
     val request = new HttpPost(url)
@@ -84,7 +79,7 @@ class CopperScarab extends Scarab with Closeable {
     using(new FileOutputStream(path)) { IOUtils.copy(res.content, _) }
   }
 
-  def post(url: String, values: Map[String, String]): DocResponse = {
+  def post(url: String, values: Map[String, String]): Response = {
     // TODO: check what to do with fileEntities, start by checking how does http work...
     // probably in not one single way, this is something to study further based on the intended use
     val request = new HttpPost(url)
@@ -92,7 +87,7 @@ class CopperScarab extends Scarab with Closeable {
     followExecute(request)
   }
 
-  def form(url: String, values: Map[String, String]): DocResponse = {
+  def form(url: String, values: Map[String, String]): Response = {
     val r = get(url)
     val form = r.doc.getElementsByTag("form").asScala.filter {
       e => !values.keys.exists(e.getElementsByAttributeValue("name", _).isEmpty())
