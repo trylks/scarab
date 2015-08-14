@@ -10,7 +10,9 @@ import scala.collection.JavaConverters.asJavaCollectionConverter
 import scala.collection.JavaConverters.asJavaIterableConverter
 import scala.collection.JavaConverters.asScalaBufferConverter
 import scala.io.Source.fromInputStream
-
+import java.nio.file.Paths
+import java.nio.file.Files
+import java.io.File
 import org.apache.commons.io.IOUtils
 import org.apache.http.StatusLine
 import org.apache.http.client.entity.UrlEncodedFormEntity
@@ -29,14 +31,11 @@ import com.github.trylks.scarab.Scarab
 import com.github.trylks.scarab.ScarabCommons.using
 import com.github.trylks.scarab.implicits.StringPrefexes
 import scala.language.implicitConversions
+import scala.util.Try
 
 class CopperScarab extends Scarab with Closeable {
 
   implicit def toEncodedEntity(values: Map[String, String]): UrlEncodedFormEntity = new UrlEncodedFormEntity(values.map(tupled(new BasicNameValuePair(_, _))).asJava)
-  case class Response(status: StatusLine, head: Map[String, String], content: InputStream, path: Seq[String] = Seq()) {
-    def setPaths(paths: Seq[String]) = this.copy(path = paths)
-    def doc = Jsoup.parse(fromInputStream(content).mkString)
-  }
 
   val exceptDoc = new Document("http://exception.com/")
 
@@ -46,15 +45,18 @@ class CopperScarab extends Scarab with Closeable {
     .setDefaultCookieStore(new BasicCookieStore())
     .setUserAgent(cs"scarab.copper.userAgent")
     .setDefaultHeaders(headers.map(tupled(new BasicHeader(_, _))).asJavaCollection)
+    .setConnectionManagerShared(true)
     .build()
 
   private def singleExecute(request: HttpRequestBase): Response = {
     request.addHeader("Referer", request.getURI.getHost.toString)
-    using(client.execute(request)) { response =>
-      Response(
-        response.getStatusLine,
-        response.getAllHeaders.map(h => h.getName -> h.getValue).toMap,
-        response.getEntity.getContent)
+    using(client execute request) { response =>
+      using(response.getEntity.getContent) { content =>
+        Response(
+          response.getStatusLine,
+          response.getAllHeaders.map(h => h.getName -> h.getValue).toMap,
+          IOUtils toByteArray content)
+      }
     }
   }
 
@@ -70,19 +72,37 @@ class CopperScarab extends Scarab with Closeable {
       res setPaths paths :+ request.getURI.toString
   }
 
-  def get(url: String): Response = followExecute(new HttpGet(url))
+  def get(url: String): Response = followExecute(new HttpGet(nice(url)))
+
+  private def nice(url: String) =
+    if (url.startsWith("//"))
+      "http:" + url
+    else url
 
   def download(url: String, path: String, values: Map[String, String] = Map()) = {
-    val request = new HttpPost(url)
-    request setEntity values
+    val request =
+      if (values.isEmpty)
+        new HttpGet(nice(url))
+      else {
+        val t = new HttpPost(nice(url))
+        t setEntity values
+        t
+      }
     val res = followExecute(request)
-    using(new FileOutputStream(path)) { IOUtils.copy(res.content, _) }
+    ensureExists(path)
+    using(new FileOutputStream(path)) { IOUtils.write(res.content, _) } //TODO: this could be improved
+  }
+
+  private def ensureExists(that: String) = {
+    val path = Paths get new File(that).getAbsolutePath
+    if (!(Files exists path))
+      Files createFile path
   }
 
   def post(url: String, values: Map[String, String]): Response = {
     // TODO: check what to do with fileEntities, start by checking how does http work...
     // probably in not one single way, this is something to study further based on the intended use
-    val request = new HttpPost(url)
+    val request = new HttpPost(nice(url))
     request setEntity values
     followExecute(request)
   }
@@ -102,4 +122,10 @@ class CopperScarab extends Scarab with Closeable {
 
   def close() = client.close
 
+}
+
+case class Response(status: StatusLine, head: Map[String, String], content: Array[Byte], path: Seq[String] = Seq()) {
+  def setPaths(paths: Seq[String]) = this.copy(path = paths)
+  def doc = Jsoup.parse(new String(content, "UTF-8"))
+  def string = new String(content, "UTF-8")
 }
