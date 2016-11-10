@@ -3,7 +3,6 @@ package com.github.trylks.scarab.copper
 import java.io.Closeable
 import java.io.FileOutputStream
 import java.io.InputStream
-
 import scala.Function.tupled
 import scala.annotation.tailrec
 import scala.collection.JavaConverters.asJavaCollectionConverter
@@ -26,12 +25,13 @@ import org.apache.http.message.BasicHeader
 import org.apache.http.message.BasicNameValuePair
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
-
 import com.github.trylks.scarab.Scarab
 import com.github.trylks.scarab.ScarabCommons.using
 import com.github.trylks.scarab.implicits.StringPrefexes
 import scala.language.implicitConversions
 import scala.util.Try
+import scala.language._
+import org.jsoup.nodes.Element
 
 class CopperScarab extends Scarab with Closeable {
 
@@ -91,6 +91,9 @@ class CopperScarab extends Scarab with Closeable {
     val res = followExecute(request)
     ensureExists(path)
     using(new FileOutputStream(path)) { IOUtils.write(res.content, _) } //TODO: this could be improved
+    // first: it should use modern classes and methods
+    // second: first download to memory, then save to a file (or send again somewhere else)
+    // this may prevent partially saved files, check that
   }
 
   private def ensureExists(that: String) = {
@@ -107,15 +110,17 @@ class CopperScarab extends Scarab with Closeable {
     followExecute(request)
   }
 
-  def form(url: String, values: Map[String, String]): Response = {
-    val r = get(url)
-    val form = r.doc.getElementsByTag("form").asScala.filter {
-      e => !values.keys.exists(e.getElementsByAttributeValue("name", _).isEmpty())
-    }(0)
-    val fields = form.getElementsByAttribute("value").asScala
-    val expandedValues = (fields.map(e => (e.attr("name") -> e.attr("value"))) ++ values).toMap
-    post(formTargetURL(url, form.attr("action")), expandedValues)
-  }
+  def form(url: String, values: Map[String, String]): Response = formAux(url, values,
+    get(url).doc.getElementsByTag("form").asScala.filter {
+      e => !values.keys.exists { e.getElementsByAttributeValue("name", _) isEmpty }
+    } head)
+
+  private def formAux(url: String, values: Map[String, String], form: Element): Response = post(
+    formTargetURL(url, form attr "action"),
+    ((form getElementsByAttribute "value" asScala) map { e => (e attr "name", e attr "value") }) ++ values toMap)
+
+  def form(url: String, values: Map[String, String], att: (String, String)): Response =
+    formAux(url, values, get(url).doc.getElementsByAttributeValue(att._1, att._2).asScala.head)
 
   private def formTargetURL(url: String, actionURL: String): String =
     new URIBuilder(url).setPath(actionURL).build().toString()
@@ -126,6 +131,6 @@ class CopperScarab extends Scarab with Closeable {
 
 case class Response(status: StatusLine, head: Map[String, String], content: Array[Byte], path: Seq[String] = Seq()) {
   def setPaths(paths: Seq[String]) = this.copy(path = paths)
-  def doc = Jsoup.parse(new String(content, "UTF-8"))
-  def string = new String(content, "UTF-8")
+  def doc() = Jsoup.parse(new String(content, "UTF-8"))
+  def string() = new String(content, "UTF-8")
 }
